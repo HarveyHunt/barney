@@ -1,5 +1,8 @@
 import struct
+import time
+import select
 import argparse
+import sys
 import cairo
 import pango
 import pangocairo
@@ -48,6 +51,7 @@ class Bar(object):
         self.pixmap = conn.generate_id()
         self.gc = conn.generate_id() 
         self.cache = AtomCache()
+        self.text = ''
 
         conn.core.CreateWindow(setup.roots[0].root_depth, self.window,
                                 setup.roots[0].root, self.config.x, self.config.y,
@@ -69,29 +73,43 @@ class Bar(object):
                                 setup.roots[0].allowed_depths[0].visuals[0],
                                 self.config.width, self.config.height)
 
+        self.winAttr = conn.core.GetGeometry(self.window).reply()
         self.setXProperties()
-        self.ctx = cairo.Context(self.surf)
-        self.ctx.set_source_rgb(*self.config.background)
-        self.ctx.set_operator(cairo.OPERATOR_SOURCE)
-        self.ctx.paint()
-        self.ctx.set_source_rgb(*self.config.foreground)
+        self.setupCairo()
         self.setupPangoCairo()
         conn.flush()
 
-
+    def setupCairo(self):
+        self.ctx = cairo.Context(self.surf)
+        self.ctx.set_operator(cairo.OPERATOR_SOURCE)
+        
     def setupPangoCairo(self):
         self.pcCtx = pangocairo.CairoContext(self.ctx)
         self.pcCtx.set_antialias(cairo.ANTIALIAS_SUBPIXEL)
-        layout = self.pcCtx.create_layout()
+        self.layout = self.pcCtx.create_layout()
         fontName = self.config.font
-        layout.set_font_description(pango.FontDescription(fontName + ' ' +
-                                                        self.config.fontsize))
-        layout.set_text(self.config.text)
-        self.pcCtx.update_layout(layout)
-        self.pcCtx.show_layout(layout)
+        self.layout.set_font_description(pango.FontDescription(fontName + ' ' +
+                                                self.config.fontsize))
 
+    def draw(self):
+        self.ctx.set_source_rgb(*self.config.background)
+        self.ctx.paint()
+        self.ctx.set_source_rgb(*self.config.foreground)
+        self.layout.set_text(self.text)
+        self.pcCtx.update_layout(self.layout)
+        self.pcCtx.show_layout(self.layout)
+        conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0, 0,
+                self.config.width, self.config.height)
     
     def setXProperties(self):
+        strut = [0] * 12
+        if self.config.bottom:
+            strut[3] = self.config.height
+            strut[11] = self.config.width
+        else:
+            strut[2] = self.config.height
+            strut[9] = self.config.width
+
         self.changeXProp(PropMode.Replace, '_NET_WM_NAME', 
                             'UTF8_STRING', 8, len("Barney"), "Barney")
 
@@ -100,23 +118,11 @@ class Bar(object):
 
         self.changeXProp(PropMode.Replace, '_NET_WM_CLASS', 
                             'UTF8_STRING', 8, len("Barney"), "Barney")
-        
+
         if self.config.opacity != 1.0:
             self.changeXProp(PropMode.Replace, '_NET_WM_WINDOW_OPACITY',
                             Atom.CARDINAL, 32, 1,
                             struct.pack('I', int(self.config.opacity * 0xffffffff)))
-        
-        if self.config.dock:
-            self.changeXProp(PropMode.Replace, '_NET_WM_WINDOW_TYPE',
-                            Atom.ATOM, 32, 1,
-                            struct.pack('I', self.cache['_NET_WM_WINDOW_TYPE_DOCK']))
-
-            self.changeXProp(PropMode.Append, '_NET_WM_STATE',
-                            Atom.ATOM, 32, 1,
-                            struct.pack('I', self.cache['_NET_WM_STATE_STICKY']))
-
-        self.changeXProp(PropMode.Replace, '_NET_WM_DESKTOP',
-                        Atom.CARDINAL, 32, 1, struct.pack('i', -1))
 
         # Partial strut is in the form: {left, right, top, bottom, left_start_y,
         # left_end_y,right_start_y, right_end_y, top_start_x, top_end_x,
@@ -124,11 +130,25 @@ class Bar(object):
 
         self.changeXProp(PropMode.Replace, '_NET_WM_STRUT_PARTIAL',
                         Atom.CARDINAL, 32, 12,
-                        struct.pack('I' * 12, 0, 0, 0, self.config.height, 0, 0, 0, 0, 0, 0,
-                            0, self.config.width))
+                        struct.pack('I' * 12, *strut))
 
         self.changeXProp(PropMode.Replace, '_NET_WM_STRUT',
-                        Atom.CARDINAL, 32, 4, struct.pack('IIII', 0, 0, 0, self.config.height))
+                Atom.CARDINAL, 32, 4, struct.pack('IIII', *strut[0:4]))
+        
+        self.changeXProp(PropMode.Replace, '_NET_WM_WINDOW_TYPE',
+                        Atom.ATOM, 32, 1,
+                        struct.pack('I', self.cache['_NET_WM_WINDOW_TYPE_DOCK']))
+
+        self.changeXProp(PropMode.Replace, '_NET_WM_STATE', 
+                        Atom.ATOM, 32, 1,
+                        struct.pack('I', self.cache['_NET_WM_STATE_ABOVE']))
+    
+        self.changeXProp(PropMode.Append, '_NET_WM_STATE',
+                        Atom.ATOM, 32, 1,
+                        struct.pack('I', self.cache['_NET_WM_STATE_STICKY']))
+
+        self.changeXProp(PropMode.Replace, '_NET_WM_DESKTOP',
+                        Atom.CARDINAL, 32, 1, struct.pack('I', 0xFFFFFFFF))
 
     def changeXProp(self, mode, prop, propType, form, dataLen, data):
         if type(prop) is str:
@@ -140,12 +160,14 @@ class Bar(object):
 
     def run(self):
         while True:
+            if select.select([sys.stdin,], [], [], 0.0):
+                self.text = sys.stdin.readline()
+                time.sleep(0.1)
+                self.draw()
             try:
-                event = conn.wait_for_event()
+                event = conn.poll_for_event()
             except xcb.ProtocolException, error:
                 print 'Protocol error %s received.' % error.__class__.__name__
-                break
-            except:
                 break
 
             if isinstance(event, ExposeEvent):
@@ -166,9 +188,8 @@ if __name__ == '__main__':
     parser.add_argument('-y', type=int, default=0)
     parser.add_argument('-fg', '--foreground', type=str, default='#FFFFFF')
     parser.add_argument('-bg', '--background', type=str, default='#000000')
-    parser.add_argument('-d', '--dock', action='store_true', default=False)
+    parser.add_argument('-b', '--bottom', action='store_true', default=False)
     parser.add_argument('-o', '--opacity', type=float, default=1)
-    parser.add_argument('-t', '--text', default='')
     parser.add_argument('-f', '--font', default="Sans")
     parser.add_argument('-fs', '--fontsize', default="12")
     args = parser.parse_args()
