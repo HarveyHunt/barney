@@ -51,7 +51,7 @@ class Bar(object):
         self.pixmap = conn.generate_id()
         self.gc = conn.generate_id() 
         self.cache = AtomCache()
-        self.text = ''
+        self.markup = ''
 
         conn.core.CreateWindow(setup.roots[0].root_depth, self.window,
                                 setup.roots[0].root, self.config.x, self.config.y,
@@ -92,10 +92,11 @@ class Bar(object):
                                                 self.config.fontsize))
 
     def draw(self):
+        print 'DRAW' , self.markup
         self.ctx.set_source_rgb(*self.config.background)
         self.ctx.paint()
         self.ctx.set_source_rgb(*self.config.foreground)
-        self.layout.set_text(self.text)
+        self.layout.set_markup(self.markup)
         self.pcCtx.update_layout(self.layout)
         self.pcCtx.show_layout(self.layout)
         conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0, 0,
@@ -161,9 +162,10 @@ class Bar(object):
     def run(self):
         while True:
             if select.select([sys.stdin,], [], [], 0.0):
-                self.text = sys.stdin.readline()
+                self.markup = sys.stdin.readline()
                 time.sleep(0.1)
-                self.draw()
+                if self.markup != '': 
+                    self.draw()
             try:
                 event = conn.poll_for_event()
             except xcb.ProtocolException, error:
