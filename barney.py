@@ -51,7 +51,6 @@ class Bar(object):
         self.pixmap = conn.generate_id()
         self.gc = conn.generate_id() 
         self.cache = AtomCache()
-        self.markup = ''
 
         conn.core.CreateWindow(setup.roots[0].root_depth, self.window,
                                 setup.roots[0].root, self.config.x, self.config.y,
@@ -91,16 +90,25 @@ class Bar(object):
         self.layout.set_font_description(pango.FontDescription(fontName + ' ' +
                                                 self.config.fontsize))
 
-    def draw(self):
-        print 'DRAW' , self.markup
+    def drawBG(self):
         self.ctx.set_source_rgb(*self.config.background)
         self.ctx.paint()
+
+    def drawText(self, markup, align):
+        self.ctx.save()
         self.ctx.set_source_rgb(*self.config.foreground)
-        self.layout.set_markup(self.markup)
+        self.layout.set_markup(markup)
         self.pcCtx.update_layout(self.layout)
+        if align == 'right':
+            self.ctx.translate(self.config.width -
+                            self.layout.get_pixel_size()[0], 0)
+        elif align == 'center':
+            self.ctx.translate((self.config.width / 2) -
+                            (self.layout.get_pixel_size()[0] / 2), 0)
         self.pcCtx.show_layout(self.layout)
         conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0, 0,
                 self.config.width, self.config.height)
+        self.ctx.restore()
     
     def setXProperties(self):
         strut = [0] * 12
@@ -161,11 +169,6 @@ class Bar(object):
 
     def run(self):
         while True:
-            if select.select([sys.stdin,], [], [], 0.0):
-                self.markup = sys.stdin.readline()
-                time.sleep(0.1)
-                if self.markup != '': 
-                    self.draw()
             try:
                 event = conn.poll_for_event()
             except xcb.ProtocolException, error:
@@ -177,8 +180,21 @@ class Bar(object):
                             0, self.config.width, self.config.height)
             elif isinstance(event, ButtonPressEvent):
                 break
-            conn.flush()
 
+            if select.select([sys.stdin,], [], [], 0.0):
+                markup = sys.stdin.readline()
+                time.sleep(0.1)
+                if markup != '': 
+                    self.drawBG()
+                    if '^l' in markup:
+                        self.drawText(markup.partition('^l')[-1].partition('^')[0],
+                                'left')
+                    if '^c' in markup:
+                        self.drawText(markup.partition('^c')[-1].partition('^')[0],
+                                'center')
+                    if '^r' in markup:
+                        self.drawText(markup.split('^r')[1], 'right')
+            conn.flush()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=
