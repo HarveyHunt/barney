@@ -9,6 +9,7 @@ import pangocairo
 import xcb
 from xcb.xproto import *
 
+
 class AtomCache(object):
     """
     A read only object that caches atom replies and cookies. 
@@ -53,8 +54,8 @@ class Bar(object):
         self.cache = AtomCache()
 
         conn.core.CreateWindow(setup.roots[0].root_depth, self.window,
-                                setup.roots[0].root, self.config.x, self.config.y,
-                                self.config.width, self.config.height, 0,
+                                setup.roots[0].root, 0, 0,
+                                setup.roots[0].width_in_pixels, self.config.height, 0,
                                 WindowClass.InputOutput,
                                 setup.roots[0].root_visual, CW.BackPixel |
                                 CW.EventMask, [setup.roots[0].white_pixel,
@@ -62,7 +63,7 @@ class Bar(object):
                                 EventMask.LeaveWindow | EventMask.Exposure])
 
         conn.core.CreatePixmap(setup.roots[0].root_depth, self.pixmap,
-                                setup.roots[0].root, self.config.width,
+                                setup.roots[0].root, setup.roots[0].width_in_pixels,
                                 self.config.height)
 
         conn.core.CreateGC(self.gc, setup.roots[0].root, GC.Foreground | GC.Background,
@@ -70,7 +71,7 @@ class Bar(object):
 
         self.surf = cairo.XCBSurface(conn, self.pixmap,
                                 setup.roots[0].allowed_depths[0].visuals[0],
-                                self.config.width, self.config.height)
+                                setup.roots[0].width_in_pixels, self.config.height)
 
         self.winAttr = conn.core.GetGeometry(self.window).reply()
         self.setXProperties()
@@ -97,27 +98,30 @@ class Bar(object):
     def drawText(self, markup, align):
         self.ctx.save()
         self.ctx.set_source_rgb(*self.config.foreground)
+        markup = self.config.seperator.join(markup)
         self.layout.set_markup(markup)
         self.pcCtx.update_layout(self.layout)
         if align == 'right':
-            self.ctx.translate(self.config.width -
+            self.ctx.translate(setup.roots[0].width_in_pixels -
                             self.layout.get_pixel_size()[0], 0)
+
         elif align == 'center':
-            self.ctx.translate((self.config.width / 2) -
+            self.ctx.translate((setup.roots[0].width_in_pixels / 2) -
                             (self.layout.get_pixel_size()[0] / 2), 0)
+
         self.pcCtx.show_layout(self.layout)
         conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0, 0,
-                self.config.width, self.config.height)
+                setup.roots[0].width_in_pixels, self.config.height)
         self.ctx.restore()
     
     def setXProperties(self):
         strut = [0] * 12
         if self.config.bottom:
             strut[3] = self.config.height
-            strut[11] = self.config.width
+            strut[11] = setup.roots[0].width_in_pixels
         else:
             strut[2] = self.config.height
-            strut[9] = self.config.width
+            strut[9] = setup.roots[0].width_in_pixels
 
         self.changeXProp(PropMode.Replace, '_NET_WM_NAME', 
                             'UTF8_STRING', 8, len("Barney"), "Barney")
@@ -177,7 +181,7 @@ class Bar(object):
 
             if isinstance(event, ExposeEvent):
                 conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0,
-                            0, self.config.width, self.config.height)
+                            0, setup.roots[0].width_in_pixels, self.config.height)
             elif isinstance(event, ButtonPressEvent):
                 break
 
@@ -186,33 +190,42 @@ class Bar(object):
                 time.sleep(0.1)
                 if markup != '': 
                     self.drawBG()
-                    if '^l' in markup:
-                        self.drawText(markup.partition('^l')[-1].partition('^')[0],
-                                'left')
-                    if '^c' in markup:
-                        self.drawText(markup.partition('^c')[-1].partition('^')[0],
-                                'center')
-                    if '^r' in markup:
-                        self.drawText(markup.split('^r')[1], 'right')
+                    markup = self.parse(markup)
+                    for alignment in markup:
+                        if markup[alignment] != []:
+                            self.drawText(markup[alignment], alignment)
             conn.flush()
+
+    def parse(self, markup):
+        leftMarkup, centerMarkup, rightMarkup= [], [], []
+        markup = markup.split('^')
+        for section in markup:
+            if len(section) != 0:
+                if section[0] == 'l':
+                    leftMarkup.append(section[1:])
+                elif section[0] == 'c':
+                    centerMarkup.append(section[1:])
+                elif section[0] == 'r':
+                    rightMarkup.append(section[1:])
+        return {'left': leftMarkup, 'center': centerMarkup, 'right': rightMarkup}
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=
                                 'A lightweight X11 bar written in Python.',
                                 conflict_handler='resolve')
-    parser.add_argument('-w', '--width', type=int, required=True)
     parser.add_argument('-h', '--height', type=int, required=True)
-    parser.add_argument('-x', type=int, default=0)
-    parser.add_argument('-y', type=int, default=0)
     parser.add_argument('-fg', '--foreground', type=str, default='#FFFFFF')
     parser.add_argument('-bg', '--background', type=str, default='#000000')
     parser.add_argument('-b', '--bottom', action='store_true', default=False)
     parser.add_argument('-o', '--opacity', type=float, default=1)
     parser.add_argument('-f', '--font', default="Sans")
+    parser.add_argument('-s', '--seperator', type=str, default='|')
     parser.add_argument('-fs', '--fontsize', default="12")
     args = parser.parse_args()
     args.foreground = tuple(ord(c) for c in args.foreground.strip('#').decode('hex'))
     args.background = tuple(ord(c) for c in args.background.strip('#').decode('hex'))
+    print args.background
 
     conn = xcb.connect()
     setup = conn.get_setup()
