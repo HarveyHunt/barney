@@ -12,7 +12,7 @@ from xcb.xproto import *
 
 class AtomCache(object):
     """
-    A read only object that caches atom replies and cookies. 
+    A read only object that caches atom replies and cookies.
 
     Cookies are collected at initialisation and replies are only requested when
     they are actually needed.
@@ -45,12 +45,18 @@ class AtomCache(object):
         return len(self.atomCookies)
 
 class Bar(object):
+    """
+    The main class of this application. It accepts a config and then proceeds
+    to draw to the window that it creates using Pango and Cairo. It reads text
+    from STDIN, has full support for pango markup and also has its own in text
+    formatting.
+    """
 
     def __init__(self, config):
         self.config = config
         self.window = conn.generate_id()
         self.pixmap = conn.generate_id()
-        self.gc = conn.generate_id() 
+        self.gc = conn.generate_id()
         self.cache = AtomCache()
 
         conn.core.CreateWindow(setup.roots[0].root_depth, self.window,
@@ -74,16 +80,23 @@ class Bar(object):
                                 setup.roots[0].width_in_pixels, self.config.height)
 
         self.winAttr = conn.core.GetGeometry(self.window).reply()
-        self.setXProperties()
+        self.setEMWH()
         self.setupCairo()
         self.setupPangoCairo()
         conn.flush()
 
     def setupCairo(self):
+        """
+        Create the Cairo context and set the operator.
+        """
         self.ctx = cairo.Context(self.surf)
         self.ctx.set_operator(cairo.OPERATOR_SOURCE)
-        
+
     def setupPangoCairo(self):
+        """
+        Creates a PangoCairo context, sets the antialiasing method for it,
+        generates a blank layout and then loads a font.
+        """
         self.pcCtx = pangocairo.CairoContext(self.ctx)
         self.pcCtx.set_antialias(cairo.ANTIALIAS_SUBPIXEL)
         self.layout = self.pcCtx.create_layout()
@@ -92,10 +105,28 @@ class Bar(object):
                                                 self.config.fontsize))
 
     def drawBG(self):
+        """
+        Draws the background of the bar using the background colour
+        provided by the config.
+        """
         self.ctx.set_source_rgb(*self.config.background)
         self.ctx.paint()
 
     def drawText(self, markup, align):
+        """
+        Draws text that is passed in the markup parameter. The align
+        parameter is used to determine how the text should be drawn.
+        All of the text is built into a single string, joined by the
+        seperator defined in the config, in order to reduce the complexity
+        of having multiple segments of text aligned the same way.
+
+        markup: A list of strings that contain markup and are to be rendered
+        on the bar.
+
+        align: A string representing the possible alignment of the text. Cairo
+        will default to the left side of the bar, so this is assumed to be the
+        default. Can have the possible values: center, left and right.
+        """
         self.ctx.save()
         self.ctx.set_source_rgb(*self.config.foreground)
         markup = self.config.seperator.join(markup)
@@ -113,8 +144,12 @@ class Bar(object):
         conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0, 0,
                 setup.roots[0].width_in_pixels, self.config.height)
         self.ctx.restore()
-    
-    def setXProperties(self):
+
+    def setEMWH(self):
+        """
+        Sets the EMWHs for the application. A full list of EMWHs can be found
+        here: http://standards.freedesktop.org/wm-spec/wm-spec-latest.html
+        """
         strut = [0] * 12
         if self.config.bottom:
             strut[3] = self.config.height
@@ -123,13 +158,13 @@ class Bar(object):
             strut[2] = self.config.height
             strut[9] = setup.roots[0].width_in_pixels
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_NAME', 
+        self.changeXProp(PropMode.Replace, '_NET_WM_NAME',
                             'UTF8_STRING', 8, len("Barney"), "Barney")
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_ICON_NAME', 
+        self.changeXProp(PropMode.Replace, '_NET_WM_ICON_NAME',
                             'UTF8_STRING', 8, len("Barney"), "Barney")
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_CLASS', 
+        self.changeXProp(PropMode.Replace, '_NET_WM_CLASS',
                             'UTF8_STRING', 8, len("Barney"), "Barney")
 
         if self.config.opacity != 1.0:
@@ -147,15 +182,15 @@ class Bar(object):
 
         self.changeXProp(PropMode.Replace, '_NET_WM_STRUT',
                 Atom.CARDINAL, 32, 4, struct.pack('IIII', *strut[0:4]))
-        
+
         self.changeXProp(PropMode.Replace, '_NET_WM_WINDOW_TYPE',
                         Atom.ATOM, 32, 1,
                         struct.pack('I', self.cache['_NET_WM_WINDOW_TYPE_DOCK']))
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_STATE', 
+        self.changeXProp(PropMode.Replace, '_NET_WM_STATE',
                         Atom.ATOM, 32, 1,
                         struct.pack('I', self.cache['_NET_WM_STATE_ABOVE']))
-    
+
         self.changeXProp(PropMode.Append, '_NET_WM_STATE',
                         Atom.ATOM, 32, 1,
                         struct.pack('I', self.cache['_NET_WM_STATE_STICKY']))
@@ -164,6 +199,11 @@ class Bar(object):
                         Atom.CARDINAL, 32, 1, struct.pack('I', 0xFFFFFFFF))
 
     def changeXProp(self, mode, prop, propType, form, dataLen, data):
+        """
+        A helper function to change X properties. If a property or
+        property type are strings, the AtomCache is accessed in order to find
+        out their atom values.
+        """
         if type(prop) is str:
             prop = self.cache[prop]
         if type(propType) is str:
@@ -172,6 +212,11 @@ class Bar(object):
                                 propType, form, dataLen, data).check()
 
     def run(self):
+        """
+        The main loop of the application. Listens for input on STDIN and only 
+        redraws if input is discovered. All event handling logic should be
+        placed in here.
+        """
         while True:
             try:
                 event = conn.poll_for_event()
@@ -181,14 +226,13 @@ class Bar(object):
 
             if isinstance(event, ExposeEvent):
                 conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0,
-                            0, setup.roots[0].width_in_pixels, self.config.height)
-            elif isinstance(event, ButtonPressEvent):
-                break
+                            0, setup.roots[0].width_in_pixels,
+                            self.config.height)
 
             if select.select([sys.stdin,], [], [], 0.0):
                 markup = sys.stdin.readline()
                 time.sleep(0.1)
-                if markup != '': 
+                if markup != '':
                     self.drawBG()
                     markup = self.parse(markup)
                     for alignment in markup:
@@ -197,7 +241,18 @@ class Bar(object):
             conn.flush()
 
     def parse(self, markup):
-        leftMarkup, centerMarkup, rightMarkup= [], [], []
+        """
+        Parses the incoming markup and returns a dictionary containing the
+        markup and how it should be aligned, once the text formatters have been
+        stripped and interpreted.
+
+        markup: A string of Pango markup passed from STDIN. It can contain the
+        text formatters: ^l, ^c, ^r.
+
+        Returns a dictionary of the markup, with the keys being the alignment
+        of the markup.
+        """
+        leftMarkup, centerMarkup, rightMarkup = [], [], []
         markup = markup.split('^')
         for section in markup:
             if len(section) != 0:
@@ -207,7 +262,8 @@ class Bar(object):
                     centerMarkup.append(section[1:])
                 elif section[0] == 'r':
                     rightMarkup.append(section[1:])
-        return {'left': leftMarkup, 'center': centerMarkup, 'right': rightMarkup}
+        return {'left': leftMarkup, 'center': centerMarkup,
+                'right': rightMarkup}
 
 
 if __name__ == '__main__':
@@ -220,12 +276,11 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--bottom', action='store_true', default=False)
     parser.add_argument('-o', '--opacity', type=float, default=1)
     parser.add_argument('-f', '--font', default="Sans")
-    parser.add_argument('-s', '--seperator', type=str, default='|')
+    parser.add_argument('-s', '--seperator', type=str, default='')
     parser.add_argument('-fs', '--fontsize', default="12")
     args = parser.parse_args()
-    args.foreground = tuple(ord(c) for c in args.foreground.strip('#').decode('hex'))
-    args.background = tuple(ord(c) for c in args.background.strip('#').decode('hex'))
-    print args.background
+    args.foreground = tuple(ord(c) / 255.0 for c in args.foreground.strip('#').decode('hex'))
+    args.background = tuple(ord(c) / 255.0 for c in args.background.strip('#').decode('hex'))
 
     conn = xcb.connect()
     setup = conn.get_setup()
