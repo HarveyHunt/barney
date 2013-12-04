@@ -34,3 +34,12 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# Installer logs
+pip-log.txt
+
+# Rope project
+.ropeproject
+
+# Vim swap files
+*.*.swp
