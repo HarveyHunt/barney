@@ -7,7 +7,7 @@ import cairo
 import pango
 import pangocairo
 import xcb
-from xcb.xproto import *
+from xcb import xproto
 
 
 class AtomCache(object):
@@ -62,17 +62,17 @@ class Bar(object):
         conn.core.CreateWindow(setup.roots[0].root_depth, self.window,
                                 setup.roots[0].root, 0, 0,
                                 setup.roots[0].width_in_pixels, self.config.height, 0,
-                                WindowClass.InputOutput,
-                                setup.roots[0].root_visual, CW.BackPixel |
-                                CW.EventMask, [setup.roots[0].white_pixel,
-                                EventMask.ButtonPress | EventMask.EnterWindow |
-                                EventMask.LeaveWindow | EventMask.Exposure])
+                                xproto.WindowClass.InputOutput,
+                                setup.roots[0].root_visual, xproto.CW.BackPixel |
+                                xproto.CW.EventMask, [setup.roots[0].white_pixel,
+                                xproto.EventMask.ButtonPress | xproto.EventMask.EnterWindow |
+                                xproto.EventMask.LeaveWindow | xproto.EventMask.Exposure])
 
         conn.core.CreatePixmap(setup.roots[0].root_depth, self.pixmap,
                                 setup.roots[0].root, setup.roots[0].width_in_pixels,
                                 self.config.height)
 
-        conn.core.CreateGC(self.gc, setup.roots[0].root, GC.Foreground | GC.Background,
+        conn.core.CreateGC(self.gc, setup.roots[0].root, xproto.GC.Foreground | xproto.GC.Background,
                             [setup.roots[0].black_pixel, setup.roots[0].white_pixel])
 
         self.surf = cairo.XCBSurface(conn, self.pixmap,
@@ -158,45 +158,45 @@ class Bar(object):
             strut[2] = self.config.height
             strut[9] = setup.roots[0].width_in_pixels
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_NAME',
+        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_NAME',
                             'UTF8_STRING', 8, len("Barney"), "Barney")
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_ICON_NAME',
+        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_ICON_NAME',
                             'UTF8_STRING', 8, len("Barney"), "Barney")
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_CLASS',
+        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_CLASS',
                             'UTF8_STRING', 8, len("Barney"), "Barney")
 
         if self.config.opacity != 1.0:
-            self.changeXProp(PropMode.Replace, '_NET_WM_WINDOW_OPACITY',
-                            Atom.CARDINAL, 32, 1,
+            self.changeXProp(xproto.PropMode.Replace, '_NET_WM_WINDOW_OPACITY',
+                            xproto.Atom.CARDINAL, 32, 1,
                             struct.pack('I', int(self.config.opacity * 0xffffffff)))
 
         # Partial strut is in the form: {left, right, top, bottom, left_start_y,
         # left_end_y,right_start_y, right_end_y, top_start_x, top_end_x,
         # bottom_start_x, bottom_end_x}
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_STRUT_PARTIAL',
-                        Atom.CARDINAL, 32, 12,
+        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_STRUT_PARTIAL',
+                        xproto.Atom.CARDINAL, 32, 12,
                         struct.pack('I' * 12, *strut))
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_STRUT',
-                Atom.CARDINAL, 32, 4, struct.pack('IIII', *strut[0:4]))
+        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_STRUT',
+                xproto.Atom.CARDINAL, 32, 4, struct.pack('IIII', *strut[0:4]))
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_WINDOW_TYPE',
-                        Atom.ATOM, 32, 1,
+        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_WINDOW_TYPE',
+                        xproto.Atom.ATOM, 32, 1,
                         struct.pack('I', self.cache['_NET_WM_WINDOW_TYPE_DOCK']))
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_STATE',
-                        Atom.ATOM, 32, 1,
+        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_STATE',
+                        xproto.Atom.ATOM, 32, 1,
                         struct.pack('I', self.cache['_NET_WM_STATE_ABOVE']))
 
-        self.changeXProp(PropMode.Append, '_NET_WM_STATE',
-                        Atom.ATOM, 32, 1,
+        self.changeXProp(xproto.PropMode.Append, '_NET_WM_STATE',
+                        xproto.Atom.ATOM, 32, 1,
                         struct.pack('I', self.cache['_NET_WM_STATE_STICKY']))
 
-        self.changeXProp(PropMode.Replace, '_NET_WM_DESKTOP',
-                        Atom.CARDINAL, 32, 1, struct.pack('I', 0xFFFFFFFF))
+        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_DESKTOP',
+                        xproto.Atom.CARDINAL, 32, 1, struct.pack('I', 0xFFFFFFFF))
 
     def changeXProp(self, mode, prop, propType, form, dataLen, data):
         """
@@ -213,7 +213,7 @@ class Bar(object):
 
     def run(self):
         """
-        The main loop of the application. Listens for input on STDIN and only 
+        The main loop of the application. Listens for input on STDIN and only
         redraws if input is discovered. All event handling logic should be
         placed in here.
         """
@@ -224,7 +224,7 @@ class Bar(object):
                 print 'Protocol error %s received.' % error.__class__.__name__
                 break
 
-            if isinstance(event, ExposeEvent):
+            if isinstance(event, xproto.ExposeEvent):
                 conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0,
                             0, setup.roots[0].width_in_pixels,
                             self.config.height)
