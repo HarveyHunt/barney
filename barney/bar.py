@@ -17,7 +17,7 @@ class AtomCache(object):
     Cookies are collected at initialisation and replies are only requested when
     they are actually needed.
     """
-    def __init__(self):
+    def __init__(self, conn):
         self.atomCookies = {}
         self.atoms = {}
         atomNames = ['_NET_WM_WINDOW_TYPE', '_NET_WM_WINDOW_TYPE_DOCK',
@@ -54,36 +54,48 @@ class Bar(object):
 
     def __init__(self, config):
         self.config = config
-        self.window = conn.generate_id()
-        self.pixmap = conn.generate_id()
-        self.gc = conn.generate_id()
-        self.cache = AtomCache()
+        self.conn = xcb.connect()
+        self.setup = self.conn.get_setup()
+        self.window = self.conn.generate_id()
+        self.pixmap = self.conn.generate_id()
+        self.gc = self.conn.generate_id()
+        self.cache = AtomCache(self.conn)
 
-        conn.core.CreateWindow(setup.roots[0].root_depth, self.window,
-                                setup.roots[0].root, 0, 0,
-                                setup.roots[0].width_in_pixels, self.config.height, 0,
+        self.conn.core.CreateWindow(self.setup.roots[0].root_depth, self.window,
+                                self.setup.roots[0].root, 0, 0,
+                                self.setup.roots[0].width_in_pixels,
+                                self.config.height, 0, 
                                 xproto.WindowClass.InputOutput,
-                                setup.roots[0].root_visual, xproto.CW.BackPixel |
-                                xproto.CW.EventMask, [setup.roots[0].white_pixel,
-                                xproto.EventMask.ButtonPress | xproto.EventMask.EnterWindow |
-                                xproto.EventMask.LeaveWindow | xproto.EventMask.Exposure])
+                                self.setup.roots[0].root_visual,
+                                xproto.CW.BackPixel |
+                                xproto.CW.EventMask,
+                                [self.setup.roots[0].white_pixel,
+                                xproto.EventMask.ButtonPress |
+                                xproto.EventMask.EnterWindow |
+                                xproto.EventMask.LeaveWindow |
+                                xproto.EventMask.Exposure])
 
-        conn.core.CreatePixmap(setup.roots[0].root_depth, self.pixmap,
-                                setup.roots[0].root, setup.roots[0].width_in_pixels,
+        self.conn.core.CreatePixmap(self.setup.roots[0].root_depth, self.pixmap,
+                                self.setup.roots[0].root,
+                                self.setup.roots[0].width_in_pixels, 
                                 self.config.height)
 
-        conn.core.CreateGC(self.gc, setup.roots[0].root, xproto.GC.Foreground | xproto.GC.Background,
-                            [setup.roots[0].black_pixel, setup.roots[0].white_pixel])
+        self.conn.core.CreateGC(self.gc, self.setup.roots[0].root,
+                                xproto.GC.Foreground | xproto.GC.Background,
+                                [self.setup.roots[0].black_pixel,
+                                self.setup.roots[0].white_pixel])
 
-        self.surf = cairo.XCBSurface(conn, self.pixmap,
-                                setup.roots[0].allowed_depths[0].visuals[0],
-                                setup.roots[0].width_in_pixels, self.config.height)
+        self.surf = cairo.XCBSurface(self.conn, self.pixmap,
+                                self.setup.roots[0].allowed_depths[0].visuals[0],
+                                self.setup.roots[0].width_in_pixels,
+                                self.config.height)
 
-        self.winAttr = conn.core.GetGeometry(self.window).reply()
+        self.winAttr = self.conn.core.GetGeometry(self.window).reply()
         self.setEMWH()
         self.setupCairo()
         self.setupPangoCairo()
-        conn.flush()
+        self.conn.core.MapWindow(self.window)
+        self.conn.flush()
 
     def setupCairo(self):
         """
@@ -133,16 +145,16 @@ class Bar(object):
         self.layout.set_markup(markup)
         self.pcCtx.update_layout(self.layout)
         if align == 'right':
-            self.ctx.translate(setup.roots[0].width_in_pixels -
+            self.ctx.translate(self.setup.roots[0].width_in_pixels -
                             self.layout.get_pixel_size()[0], 0)
 
         elif align == 'center':
-            self.ctx.translate((setup.roots[0].width_in_pixels / 2) -
+            self.ctx.translate((self.setup.roots[0].width_in_pixels / 2) -
                             (self.layout.get_pixel_size()[0] / 2), 0)
 
         self.pcCtx.show_layout(self.layout)
-        conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0, 0,
-                setup.roots[0].width_in_pixels, self.config.height)
+        self.conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0, 0,
+                self.setup.roots[0].width_in_pixels, self.config.height)
         self.ctx.restore()
 
     def setEMWH(self):
@@ -153,10 +165,10 @@ class Bar(object):
         strut = [0] * 12
         if self.config.bottom:
             strut[3] = self.config.height
-            strut[11] = setup.roots[0].width_in_pixels
+            strut[11] = self.setup.roots[0].width_in_pixels
         else:
             strut[2] = self.config.height
-            strut[9] = setup.roots[0].width_in_pixels
+            strut[9] = self.setup.roots[0].width_in_pixels
 
         self.changeXProp(xproto.PropMode.Replace, '_NET_WM_NAME',
                             'UTF8_STRING', 8, len("Barney"), "Barney")
@@ -170,7 +182,8 @@ class Bar(object):
         if self.config.opacity != 1.0:
             self.changeXProp(xproto.PropMode.Replace, '_NET_WM_WINDOW_OPACITY',
                             xproto.Atom.CARDINAL, 32, 1,
-                            struct.pack('I', int(self.config.opacity * 0xffffffff)))
+                            struct.pack('I',
+                                int(self.config.opacity * 0xffffffff)))
 
         # Partial strut is in the form: {left, right, top, bottom, left_start_y,
         # left_end_y,right_start_y, right_end_y, top_start_x, top_end_x,
@@ -208,7 +221,7 @@ class Bar(object):
             prop = self.cache[prop]
         if type(propType) is str:
             propType = self.cache[propType]
-        conn.core.ChangePropertyChecked(mode, self.window, prop,
+        self.conn.core.ChangePropertyChecked(mode, self.window, prop,
                                 propType, form, dataLen, data).check()
 
     def run(self):
@@ -219,14 +232,14 @@ class Bar(object):
         """
         while True:
             try:
-                event = conn.poll_for_event()
+                event = self.conn.poll_for_event()
             except xcb.ProtocolException, error:
                 print 'Protocol error %s received.' % error.__class__.__name__
                 break
 
             if isinstance(event, xproto.ExposeEvent):
-                conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0,
-                            0, setup.roots[0].width_in_pixels,
+                self.conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0,
+                            0, 0, self.setup.roots[0].width_in_pixels,
                             self.config.height)
 
             if select.select([sys.stdin,], [], [], 0.0):
@@ -238,7 +251,7 @@ class Bar(object):
                     for alignment in markup:
                         if markup[alignment] != []:
                             self.drawText(markup[alignment], alignment)
-            conn.flush()
+            self.conn.flush()
 
     def parse(self, markup):
         """
@@ -266,7 +279,8 @@ class Bar(object):
                 'right': rightMarkup}
 
 
-if __name__ == '__main__':
+
+def main():
     parser = argparse.ArgumentParser(description=
                                 'A lightweight X11 bar written in Python.',
                                 conflict_handler='resolve')
@@ -279,12 +293,13 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--seperator', type=str, default='')
     parser.add_argument('-fs', '--fontsize', default="12")
     args = parser.parse_args()
-    args.foreground = tuple(ord(c) / 255.0 for c in args.foreground.strip('#').decode('hex'))
-    args.background = tuple(ord(c) / 255.0 for c in args.background.strip('#').decode('hex'))
+    args.foreground = tuple(ord(c) / 255.0 for c in 
+                            args.foreground.strip('#').decode('hex'))
+    args.background = tuple(ord(c) / 255.0 for c in
+                            args.background.strip('#').decode('hex'))
 
-    conn = xcb.connect()
-    setup = conn.get_setup()
     b = Bar(args)
-    conn.core.MapWindow(b.window)
-    conn.flush()
     b.run()
+
+if __name__ == '__main__':
+    main()
