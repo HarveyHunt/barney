@@ -4,6 +4,7 @@ barney
 A lightweight X11 bar with support for opacity, unicode and multiple alignments of text.
 
 Barney requires:
+* [Python 2] (http://www.python.org/)
 * [Cairo] (http://cairographics.org/)
 * [PyCairo] (http://cairographics.org/pycairo/)
 * [Pango] (http://www.pango.org/)
