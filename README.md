@@ -10,6 +10,8 @@ Barney requires:
 * [Pango] (http://www.pango.org/)
 * [xpyb] (https://pypi.python.org/pypi/xpyb)
 
+======
+
 Barney waits for input to be passed over STDIN. Pango markup languages can be used, as described [here](http://www.pygtk.org/docs/pygtk/pango-markup-language.html).
 
 Text can be aligned using the following formatters:
