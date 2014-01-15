@@ -10,7 +10,21 @@ Barney requires:
 * [Pango] (http://www.pango.org/)
 * [xpyb] (https://pypi.python.org/pypi/xpyb)
 
+Installing
 ======
+
+Barney can be installed using the following commands (assuming that you have installed the dependencies):
+
+    git clone https://github.com/HarveyHunt/barney
+  
+    cd barney
+  
+    sudo python2 setup.py install
+  
+Alternatively, it can installed from the [AUR](https://aur.archlinux.org/packages/barney-git/).
+
+Arguments
+=====
 
 Barney waits for input to be passed over STDIN. Pango markup languages can be used, as described [here](http://www.pygtk.org/docs/pygtk/pango-markup-language.html).
 
