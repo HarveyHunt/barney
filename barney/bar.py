@@ -265,18 +265,18 @@ class Bar(object):
         Returns a dictionary of the markup, with the keys being the alignment
         of the markup.
         """
-        leftMarkup, centerMarkup, rightMarkup = [], [], []
+        left_markup, center_markup, right_markup = [], [], []
         markup = markup.split('^')
         for section in markup:
             if len(section) != 0:
                 if section[0] == 'l':
-                    leftMarkup.append(section[1:])
+                    left_markup.append(section[1:])
                 elif section[0] == 'c':
-                    centerMarkup.append(section[1:])
+                    center_markup.append(section[1:])
                 elif section[0] == 'r':
-                    rightMarkup.append(section[1:])
-        return {'left': leftMarkup, 'center': centerMarkup,
-                'right': rightMarkup}
+                    right_markup.append(section[1:])
+        return {'left': left_markup, 'center': center_markup,
+                'right': right_markup}
 
 
 
@@ -284,7 +284,7 @@ def main():
     parser = argparse.ArgumentParser(description=
                                 'A lightweight X11 bar written in Python.',
                                 conflict_handler='resolve')
-    parser.add_argument('-h', '--height', type=int, required=True)
+    parser.add_argument('-h', '--height', type=int, default=20)
     parser.add_argument('-fg', '--foreground', type=str, default='#FFFFFF')
     parser.add_argument('-bg', '--background', type=str, default='#000000')
     parser.add_argument('-b', '--bottom', action='store_true', default=False)
@@ -292,14 +292,21 @@ def main():
     parser.add_argument('-f', '--font', default="Sans")
     parser.add_argument('-s', '--seperator', type=str, default='')
     parser.add_argument('-fs', '--fontsize', default="12")
+    parser.add_argument('-l', '--list-fonts', action='store_true', default=False)
     args = parser.parse_args()
     args.foreground = tuple(ord(c) / 255.0 for c in 
                             args.foreground.strip('#').decode('hex'))
     args.background = tuple(ord(c) / 255.0 for c in
                             args.background.strip('#').decode('hex'))
+    if args.list_fonts:
+        list_fonts()
+    else:
+        b = Bar(args)
+        b.run()
 
-    b = Bar(args)
-    b.run()
+def list_fonts():
+    font_map = pangocairo.cairo_font_map_get_default()
+    print('\n'.join([x.get_name() for x in font_map.list_families()]))
 
 if __name__ == '__main__':
     main()
