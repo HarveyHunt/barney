@@ -10,6 +10,9 @@ Barney requires:
 * [Pango] (http://www.pango.org/)
 * [xpyb] (https://pypi.python.org/pypi/xpyb)
 
+In order to get the correct PangoCairo support, it is easiest to install [PyGTK](http://www.pygtk.org/), at least
+that is the case on Arch Linux.
+
 Installing
 ======
 
