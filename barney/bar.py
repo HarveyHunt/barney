@@ -18,31 +18,31 @@ class AtomCache(object):
     they are actually needed.
     """
     def __init__(self, conn):
-        self.atomCookies = {}
+        self.atom_cookies = {}
         self.atoms = {}
-        atomNames = ['_NET_WM_WINDOW_TYPE', '_NET_WM_WINDOW_TYPE_DOCK',
+        atom_names = ['_NET_WM_WINDOW_TYPE', '_NET_WM_WINDOW_TYPE_DOCK',
                         '_NET_WM_DESKTOP', '_NET_WM_STRUT_PARTIAL',
                         '_NET_WM_STRUT', '_NET_WM_STATE',
                         '_NET_WM_STATE_ABOVE', '_NET_WM_STATE_ABOVE',
                         '_NET_WM_NAME', '_NET_WM_WINDOW_OPACITY',
                         '_NET_WM_STATE_STICKY', '_NET_WM_ICON_NAME',
                         '_NET_WM_CLASS', 'UTF8_STRING']
-        for name in atomNames:
-            self.atomCookies[name] = conn.core.InternAtomUnchecked(False,
+        for name in atom_names:
+            self.atom_cookies[name] = conn.core.InternAtomUnchecked(False,
                     len(name),
                     name)
 
     def __getitem__(self, key):
         if key in self.atoms:
             return self.atoms[key]
-        elif key in self.atomCookies:
-            self.atoms[key] = self.atomCookies[key].reply().atom
+        elif key in self.atom_cookies:
+            self.atoms[key] = self.atom_cookies[key].reply().atom
             return self.atoms[key]
         else:
             raise KeyError(str(key))
 
     def __len__(self):
-        return len(self.atomCookies)
+        return len(self.atom_cookies)
 
 class Bar(object):
     """
@@ -90,33 +90,33 @@ class Bar(object):
                                 self.setup.roots[0].width_in_pixels,
                                 self.config.height)
 
-        self.winAttr = self.conn.core.GetGeometry(self.window).reply()
-        self.setEMWH()
-        self.setupCairo()
-        self.setupPangoCairo()
+        self.win_attr = self.conn.core.GetGeometry(self.window).reply()
+        self.set_emwh()
+        self.setup_cairo()
+        self.setup_pango_cairo()
         self.conn.core.MapWindow(self.window)
         self.conn.flush()
 
-    def setupCairo(self):
+    def setup_cairo(self):
         """
         Create the Cairo context and set the operator.
         """
         self.ctx = cairo.Context(self.surf)
         self.ctx.set_operator(cairo.OPERATOR_SOURCE)
 
-    def setupPangoCairo(self):
+    def setup_pango_cairo(self):
         """
         Creates a PangoCairo context, sets the antialiasing method for it,
         generates a blank layout and then loads a font.
         """
-        self.pcCtx = pangocairo.CairoContext(self.ctx)
-        self.pcCtx.set_antialias(cairo.ANTIALIAS_SUBPIXEL)
-        self.layout = self.pcCtx.create_layout()
-        fontName = self.config.font
-        self.layout.set_font_description(pango.FontDescription(fontName + ' ' +
+        self.pc_ctx = pangocairo.CairoContext(self.ctx)
+        self.pc_ctx.set_antialias(cairo.ANTIALIAS_SUBPIXEL)
+        self.layout = self.pc_ctx.create_layout()
+        font_name = self.config.font
+        self.layout.set_font_description(pango.FontDescription(font_name + ' ' +
                                                 self.config.fontsize))
 
-    def drawBG(self):
+    def draw_bg(self):
         """
         Draws the background of the bar using the background colour
         provided by the config.
@@ -124,7 +124,7 @@ class Bar(object):
         self.ctx.set_source_rgb(*self.config.background)
         self.ctx.paint()
 
-    def drawText(self, markup, align):
+    def draw_text(self, markup, align):
         """
         Draws text that is passed in the markup parameter. The align
         parameter is used to determine how the text should be drawn.
@@ -143,7 +143,7 @@ class Bar(object):
         self.ctx.set_source_rgb(*self.config.foreground)
         markup = self.config.seperator.join(markup)
         self.layout.set_markup(markup)
-        self.pcCtx.update_layout(self.layout)
+        self.pc_ctx.update_layout(self.layout)
         if align == 'right':
             self.ctx.translate(self.setup.roots[0].width_in_pixels -
                             self.layout.get_pixel_size()[0], 0)
@@ -152,12 +152,12 @@ class Bar(object):
             self.ctx.translate((self.setup.roots[0].width_in_pixels / 2) -
                             (self.layout.get_pixel_size()[0] / 2), 0)
 
-        self.pcCtx.show_layout(self.layout)
+        self.pc_ctx.show_layout(self.layout)
         self.conn.core.CopyArea(self.pixmap, self.window, self.gc, 0, 0, 0, 0,
                 self.setup.roots[0].width_in_pixels, self.config.height)
         self.ctx.restore()
 
-    def setEMWH(self):
+    def set_emwh(self):
         """
         Sets the EMWHs for the application. A full list of EMWHs can be found
         here: http://standards.freedesktop.org/wm-spec/wm-spec-latest.html
@@ -170,17 +170,17 @@ class Bar(object):
             strut[2] = self.config.height
             strut[9] = self.setup.roots[0].width_in_pixels
 
-        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_NAME',
+        self.change_x_prop(xproto.PropMode.Replace, '_NET_WM_NAME',
                             'UTF8_STRING', 8, len("Barney"), "Barney")
 
-        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_ICON_NAME',
+        self.change_x_prop(xproto.PropMode.Replace, '_NET_WM_ICON_NAME',
                             'UTF8_STRING', 8, len("Barney"), "Barney")
 
-        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_CLASS',
+        self.change_x_prop(xproto.PropMode.Replace, '_NET_WM_CLASS',
                             'UTF8_STRING', 8, len("Barney"), "Barney")
 
         if self.config.opacity != 1.0:
-            self.changeXProp(xproto.PropMode.Replace, '_NET_WM_WINDOW_OPACITY',
+            self.change_x_prop(xproto.PropMode.Replace, '_NET_WM_WINDOW_OPACITY',
                             xproto.Atom.CARDINAL, 32, 1,
                             struct.pack('I',
                                 int(self.config.opacity * 0xffffffff)))
@@ -189,29 +189,29 @@ class Bar(object):
         # left_end_y,right_start_y, right_end_y, top_start_x, top_end_x,
         # bottom_start_x, bottom_end_x}
 
-        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_STRUT_PARTIAL',
+        self.change_x_prop(xproto.PropMode.Replace, '_NET_WM_STRUT_PARTIAL',
                         xproto.Atom.CARDINAL, 32, 12,
                         struct.pack('I' * 12, *strut))
 
-        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_STRUT',
+        self.change_x_prop(xproto.PropMode.Replace, '_NET_WM_STRUT',
                 xproto.Atom.CARDINAL, 32, 4, struct.pack('IIII', *strut[0:4]))
 
-        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_WINDOW_TYPE',
+        self.change_x_prop(xproto.PropMode.Replace, '_NET_WM_WINDOW_TYPE',
                         xproto.Atom.ATOM, 32, 1,
                         struct.pack('I', self.cache['_NET_WM_WINDOW_TYPE_DOCK']))
 
-        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_STATE',
+        self.change_x_prop(xproto.PropMode.Replace, '_NET_WM_STATE',
                         xproto.Atom.ATOM, 32, 1,
                         struct.pack('I', self.cache['_NET_WM_STATE_ABOVE']))
 
-        self.changeXProp(xproto.PropMode.Append, '_NET_WM_STATE',
+        self.change_x_prop(xproto.PropMode.Append, '_NET_WM_STATE',
                         xproto.Atom.ATOM, 32, 1,
                         struct.pack('I', self.cache['_NET_WM_STATE_STICKY']))
 
-        self.changeXProp(xproto.PropMode.Replace, '_NET_WM_DESKTOP',
+        self.change_x_prop(xproto.PropMode.Replace, '_NET_WM_DESKTOP',
                         xproto.Atom.CARDINAL, 32, 1, struct.pack('I', 0xFFFFFFFF))
 
-    def changeXProp(self, mode, prop, propType, form, dataLen, data):
+    def change_x_prop(self, mode, prop, prop_type, form, data_len, data):
         """
         A helper function to change X properties. If a property or
         property type are strings, the AtomCache is accessed in order to find
@@ -219,10 +219,10 @@ class Bar(object):
         """
         if type(prop) is str:
             prop = self.cache[prop]
-        if type(propType) is str:
-            propType = self.cache[propType]
+        if type(prop_type) is str:
+            prop_type = self.cache[prop_type]
         self.conn.core.ChangePropertyChecked(mode, self.window, prop,
-                                propType, form, dataLen, data).check()
+                                prop_type, form, data_len, data).check()
 
     def run(self):
         """
@@ -246,11 +246,11 @@ class Bar(object):
                 markup = sys.stdin.readline()
                 time.sleep(0.1)
                 if markup != '':
-                    self.drawBG()
+                    self.draw_bg()
                     markup = self.parse(markup)
                     for alignment in markup:
                         if markup[alignment] != []:
-                            self.drawText(markup[alignment], alignment)
+                            self.draw_text(markup[alignment], alignment)
             self.conn.flush()
 
     def parse(self, markup):
